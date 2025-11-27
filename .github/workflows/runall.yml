@@ -1,4 +1,4 @@
-name: Compile All S9/S9+/N9 kernels
+name: Build S9/S9+/N9 kernels
 on: [workflow_dispatch]
 jobs:
   build:
