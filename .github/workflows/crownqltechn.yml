@@ -12,7 +12,7 @@ jobs:
 
     steps:
     - name: Build Kernel
-      uses: haifu5872/crownqltechn@main
+      uses: haifu5872/crownqltechn@main /actionAndrey08.yml
       with:
           kernel-url: https://github.com/haifu5872/N9600_SDM845_kernel
           kernel-dir: sdm845
