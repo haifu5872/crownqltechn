@@ -1,0 +1,688 @@
+name: 'Android Kernel Build Action'
+description: "An action to build android kernel."
+
+branding:
+  icon: 'activity'
+  color: 'blue'
+
+inputs:
+  kernel-url:
+    required: true
+  depth:
+    required: false
+    default: 1
+  vendor:
+    required: false
+    default: false
+  vendor-url:
+    required: false
+  kernel-dir:
+    required: false
+    default: kernel
+  vendor-dir:
+    required: false
+    default: vendor
+  kernel-branch:
+    required: false
+    default: main
+  vendor-branch:
+    required: false
+    default: main
+  config:
+    required: true
+    default: defconfig
+  arch:
+    required: true
+    default: arm64
+  android-version:
+    required: false
+    default: ""
+  ksu:
+    required: false
+    default: false
+  rekernel:
+    required: false
+    default: false
+  ksu-version:
+    required: false
+    default: "main"
+  ksu-other:
+    required: false
+    default: false
+  ksu-url:
+    required: false
+  ksu-lkm:
+    required: false
+    default: false
+  disable-lto:
+    required: false
+    default: false
+  lxc:
+    required: false
+    default: false
+  lxc-patch:
+    required: false
+    default: false
+  nethunter:
+    required: false
+    default: false
+  nethunter-patch:
+    required: false
+    default: false
+  kvm:
+    required: false
+    default: false
+  ccache:
+    required: false
+    default: false
+  aosp-gcc:
+    required: false
+    default: false
+  other-gcc32-url:
+    required: false
+  other-gcc32-branch:
+    required: false
+    default: main
+  other-gcc64-url:
+    required: false
+  other-gcc64-branch:
+    required: false
+    default: main
+  aosp-clang:
+    required: false
+    default: false
+  aosp-clang-version:
+    required: false
+    default: "r383902"
+  other-clang-url:
+    required: false
+  other-clang-branch:
+    required: false
+    default: main
+  anykernel3:
+    required: false
+    default: false
+  anykernel3-url:
+    required: false
+  bootimg-url:
+    required: false
+  release:
+    required: false
+    default: false
+  access-token:
+    required: false
+  extra-make-args:
+    required: false
+    default: '[]'
+
+runs:
+  using: 'composite'
+  steps:
+
+    - name: Setup ccache
+      if: inputs.ccache == 'true'
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ inputs.config }}-0cb68f9cbcbb3de9c966cf66ed51471fbe51419e
+        max-size: 4G
+        create-symlink: true
+
+    - name: Build Kernel
+      shell: bash
+      run: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # Function to display error messages and exit
+        error() {
+            echo "Error: $1" >&2
+            exit 1
+        }
+
+        # Function to run a command with sudo if not already root
+        SU() {
+            if [ "$(id -u)" -eq 0 ]; then
+                "$@"
+            else
+                sudo "$@"
+            fi
+        }
+
+        # Function to download and extract a file
+        download_and_extract() {
+            local url=$1
+            local output_name=$2
+            local extract_dir=$3
+            local branch=${4:-main}
+
+            mkdir -p -v "$extract_dir"
+            case "$url" in
+                *.zip)
+                    aria2c -o "${output_name}.zip" "$url"
+                    unzip -q "${output_name}.zip" -d "$extract_dir"
+                    ;;
+                *.tar.*|*.gz|*.xz|*.bz2)
+                    aria2c -o "${output_name}.${url##*.}" "$url"
+                    tar -C "$extract_dir" -xf "${output_name}.${url##*.}"
+                    ;;
+                *)
+                    git clone --depth="${{ inputs.depth }}" -b "$branch" "$url" "$extract_dir"
+                    ;;
+            esac
+        }
+
+        # Check if the action is running on a Debian-based runner
+        if [[ ${GITHUB_ACTIONS} != "true" || ${OSTYPE} != "linux-gnu" || ! -f /bin/apt ]]; then
+            error "This action is intended for Debian-based runners."
+        fi
+
+        # Install dependencies
+        echo "::group::Installing Building Depend Packages"
+        SU apt-get update
+        SU apt-get install --no-install-recommends -y \
+            binutils git make bc bison openssl curl zip kmod cpio flex libelf-dev \
+            libssl-dev libtfm-dev libc6-dev device-tree-compiler ca-certificates \
+            python3 xz-utils aria2 build-essential ccache pigz parallel jq opam libpcre3-dev
+        echo "::endgroup::"
+
+        # Download and set up the toolchain
+        if [ "${{ inputs.aosp-clang }}" == "true" ]; then
+            echo "::group::Downloading AOSP Clang"
+            if [ "${{ inputs.aosp-gcc }}" != "true" ]; then
+                error "AOSP GCC is required when using AOSP Clang."
+            fi
+            AOSP_CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/"
+            if [ -n "${{ inputs.android-version }}" ]; then
+                AOSP_CLANG_URL+="android${{ inputs.android-version }}-release/clang-${{ inputs.aosp-clang-version }}.tar.gz"
+            else
+                AOSP_CLANG_URL+="mirror-goog-main-llvm-toolchain-source/clang-${{ inputs.aosp-clang-version }}.tar.gz"
+            fi
+            download_and_extract "$AOSP_CLANG_URL" "aosp-clang" "$HOME/clang"
+            echo "::endgroup::"
+        elif [ -n "${{ inputs.other-clang-url }}" ]; then
+            echo "::group::Downloading Third-party Clang"
+            download_and_extract "${{ inputs.other-clang-url }}" "clang" "$HOME/clang" "${{ inputs.other-clang-branch }}"
+            if [ ! -d "$HOME/clang/bin" ]; then
+                # Move nested directories up if bin is not at the expected location
+                for dir in "$HOME/clang"/*/*; do
+                    if [ -d "$dir" ]; then
+                        mv "$dir"/* "$HOME/clang/" 2>/dev/null || true
+                        break
+                    fi
+                done
+            fi
+            if ! ls "$HOME/clang"/*-linux-* &>/dev/null; then
+                echo "Binutils not found in clang directory. Downloading AOSP GCC"
+                export NEED_GCC=1
+            fi
+            echo "::endgroup::"
+        else
+            SU apt-get install -y clang lld binutils-aarch64-linux-gnu binutils-arm-linux-gnueabihf
+        fi
+
+        if [ "${{ inputs.aosp-gcc }}" == "true" ] || [ -n "${NEED_GCC:-}" ]; then
+            echo "::group::Downloading AOSP GCC"
+            if [ -n "${{ inputs.android-version }}" ]; then
+                AOSP_GCC64_URL="https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9"
+                AOSP_GCC32_URL="https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9"
+                AOSP_GCC_BRANCH="android${{ inputs.android-version }}-release"
+            else
+                AOSP_GCC64_URL="https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz"
+                AOSP_GCC32_URL="https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz"
+            fi
+            download_and_extract "$AOSP_GCC64_URL" "gcc-aarch64" "$HOME/gcc-64" "${AOSP_GCC_BRANCH:-main}"
+            download_and_extract "$AOSP_GCC32_URL" "gcc-arm" "$HOME/gcc-32" "${AOSP_GCC_BRANCH:-main}"
+            echo "::endgroup::"
+        elif [ -n "${{ inputs.other-gcc64-url }}" ] || [ -n "${{ inputs.other-gcc32-url }}" ]; then
+            echo "::group::Downloading Third-party GCC"
+            if [ -n "${{ inputs.other-gcc64-url }}" ]; then
+                download_and_extract "${{ inputs.other-gcc64-url }}" "gcc-aarch64" "$HOME/gcc-64" "${{ inputs.other-gcc64-branch }}"
+            fi
+            if [ -n "${{ inputs.other-gcc32-url }}" ]; then
+                download_and_extract "${{ inputs.other-gcc32-url }}" "gcc-arm" "$HOME/gcc-32" "${{ inputs.other-gcc32-branch }}"
+            fi
+            echo "::endgroup::"
+        fi
+
+        if [ -d "$HOME/gcc-64" ]; then
+            if [ ! -d "$HOME/gcc-64/bin" ]; then
+                # Move nested directories up if bin is not at the expected location
+                for dir in "$HOME/gcc-64"/*/*; do
+                    if [ -d "$dir" ]; then
+                        mv "$dir"/* "$HOME/gcc-64/" 2>/dev/null || true
+                        break
+                    fi
+                done
+            fi
+        fi
+        if [ -d "$HOME/gcc-32" ]; then
+            if [ ! -d "$HOME/gcc-32/bin" ]; then
+                # Move nested directories up if bin is not at the expected location
+                for dir in "$HOME/gcc-32"/*/*; do
+                    if [ -d "$dir" ]; then
+                        mv "$dir"/* "$HOME/gcc-32/" 2>/dev/null || true
+                        break
+                    fi
+                done
+            fi
+        fi
+
+        # Clone the kernel source
+        echo "::group::Pulling Kernel Source"
+        git clone --recursive -b "${{ inputs.kernel-branch }}" --depth="${{ inputs.depth }}" "${{ inputs.kernel-url }}" "kernel/${{ inputs.kernel-dir }}"
+        echo "::endgroup::"
+
+        # Clone the vendor kernel source if specified
+        if [ "${{ inputs.vendor }}" == "true" ]; then
+            echo "::group::Pulling Kernel Vendor Source"
+            git clone -b "${{ inputs.vendor-branch }}" --depth="${{ inputs.depth }}" "${{ inputs.vendor-url }}" "kernel/${{ inputs.vendor-dir }}"
+            if [ -d "kernel/${{ inputs.vendor-dir }}/vendor" ]; then
+                cp -rv "kernel/${{ inputs.vendor-dir }}/vendor" kernel
+                cp -rv "kernel/${{ inputs.vendor-dir }}/vendor" ./
+            fi
+            echo "::endgroup::"
+        fi
+
+        cd "kernel/${{ inputs.kernel-dir }}"
+
+        # Set up GCC-related variables
+        if [ -d "$HOME/gcc-64/bin" ] || [ -d "$HOME/gcc-32/bin" ]; then
+            for GCC_DIR in "$HOME/gcc-64" "$HOME/gcc-32"; do
+                find "$GCC_DIR"/*/*/bin -type d -exec sh -c 'mv "$(dirname "$1")"/* "$2"/' _ {} "$GCC_DIR" \; -quit >/dev/null 2>&1 || true
+                if [ -d "$GCC_DIR/bin" ]; then
+                    for FILE in "$GCC_DIR/bin"/*; do
+                        [ ! -e "$FILE" ] && continue
+                        FILE_NAME=$(basename "$FILE")
+                        MATCHED_DIR=""
+                        while IFS= read -r FOLDER; do
+                            FOLDER_NAME=$(basename "$FOLDER")
+                            if [[ "$FILE_NAME" == "$FOLDER_NAME"* ]]; then
+                                MATCHED_DIR="$FOLDER_NAME"
+                                break
+                            fi
+                        done < <(find "$GCC_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r)
+                        if [ -n "$MATCHED_DIR" ]; then
+                            case "$GCC_DIR" in
+                                "$HOME/gcc-64") GCC64="$MATCHED_DIR" ;;
+                                "$HOME/gcc-32") GCC32="$MATCHED_DIR" ;;
+                            esac
+                            break
+                        fi
+                    done
+                fi
+            done
+        fi
+
+        # Get kernel version
+        VERSION=$(grep -E '^VERSION = ' Makefile | awk '{print $3}')
+        PATCHLEVEL=$(grep -E '^PATCHLEVEL = ' Makefile | awk '{print $3}')
+        SUBLEVEL=$(grep -E '^SUBLEVEL = ' Makefile | awk '{print $3}')
+
+        # Validate kernel version
+        if [ -z "$VERSION" ] || [ -z "$PATCHLEVEL" ]; then
+            error "Failed to extract kernel version from Makefile"
+        fi
+
+        # Check for non-GKI kernel for KernelSU
+        NONGKI=false
+        if [ "$VERSION" -lt 5 ] 2>/dev/null || { [ "$VERSION" -eq 5 ] 2>/dev/null && [ "$PATCHLEVEL" -lt 10 ] 2>/dev/null; }; then
+            NONGKI=true
+        fi
+
+        # Initialize KernelSU if enabled
+        if [ "${{ inputs.ksu }}" == "true" ]; then
+            echo "::group::Initializing KernelSU"
+            if [ -f KernelSU/kernel/Kconfig ]; then
+                echo "KernelSU has been initialized, skipping."
+            else
+                # Download the KernelSU setup script
+                if [ "${{ inputs.ksu-other }}" == "true" ]; then
+                    if [ -z "${{ inputs.ksu-url }}" ]; then
+                        error "ksu-url is required when ksu-other is true"
+                    fi
+                    curl -sSLf "${{ inputs.ksu-url }}/raw/${{ inputs.ksu-version }}/kernel/setup.sh" -o ksu_setup.sh || error "Failed to download KernelSU setup script"
+                else
+                    curl -sSLf "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" -o ksu_setup.sh || error "Failed to download KernelSU setup script"
+                fi
+
+                # Determine the KernelSU version to use
+                echo "Kernel version: $VERSION.$PATCHLEVEL.$SUBLEVEL"
+                KVER="${{ inputs.ksu-version }}"
+                if [ "$NONGKI" == "true" ] && [ "${{ inputs.ksu-other }}" == "false" ]; then
+                    echo "Warning: The KernelSU version you selected was detected to be ${{ inputs.ksu-version }}, but KernelSU has dropped support for the non-gki kernel since 0.9.5."
+                    echo "This will force switch to v0.9.5."
+                    KVER=v0.9.5
+                fi
+
+                # Execute the KernelSU setup script
+                bash ksu_setup.sh "$KVER" || error "Failed to execute KernelSU setup script"
+            fi
+
+            # Configure KernelSU
+            CONFIG_FILE="arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+            if [ "${{ inputs.ksu-lkm }}" == "true" ]; then
+                # Build KernelSU as a loadable kernel module
+                if grep -q "CONFIG_KPROBES=y" "$CONFIG_FILE"; then
+                    sed -i 's/CONFIG_KSU=y/CONFIG_KSU=m/g' "$CONFIG_FILE"
+                else
+                    sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
+                fi
+            elif [ "$NONGKI" == "true" ]; then
+                # Apply patches for non-GKI kernels
+                if grep -q "CONFIG_KPROBES=y" "$CONFIG_FILE" 2>/dev/null; then
+                    echo "CONFIG_KPROBES is enabled, skip patch."
+                else
+                    opam init --disable-sandboxing --yes
+                    eval $(opam env)
+                    opam install --yes coccinelle
+                    if curl -sSLf "https://github.com/dabao1955/kernel_build_action/raw/main/kernelsu/apply_cocci.sh" -o /tmp/apply_cocci.sh; then
+                        bash /tmp/apply_cocci.sh || echo "Warning: Failed to apply KernelSU patches"
+                        rm -f /tmp/apply_cocci.sh
+                    else
+                        echo "Warning: Failed to download apply_cocci.sh"
+                    fi
+                fi
+            fi
+            echo "::endgroup::"
+        fi
+
+        # Initialize Re-Kernel if enabled
+        if [ "${{ inputs.rekernel }}" == "true" ]; then
+            echo "::group::Initializing Re-Kernel"
+            if curl -sSLf https://github.com/dabao1955/kernel_build_action/raw/main/rekernel/patch.sh -o /tmp/rekernel_patch.sh; then
+                bash /tmp/rekernel_patch.sh || error "Failed to apply Re-Kernel patches"
+                rm -f /tmp/rekernel_patch.sh
+            else
+                error "Failed to download Re-Kernel patch script"
+            fi
+            echo "::endgroup::"
+        fi
+
+        # Use Python3 version of mkdtboimg.py
+        if [ -f scripts/dtc/libfdt/mkdtboimg.py ]; then
+            if grep -q python2 scripts/Makefile.lib 2>/dev/null; then
+                echo "::group::Using mkdtboimg Python3 version instead of Python2 version"
+                rm -f scripts/dtc/libfdt/mkdtboimg.py
+                cp -v "${{ github.action_path }}/mkdtboimg.py" scripts/dtc/libfdt/mkdtboimg.py
+                echo "::endgroup::"
+            elif grep -q scripts/ufdt scripts/Makefile.lib 2>/dev/null && [ ! -d scripts/ufdt ]; then
+                mkdir -p ufdt/libufdt/utils/src
+                cp -v "${{ github.action_path }}/mkdtboimg.py" ufdt/libufdt/utils/src/mkdtboimg.py
+            fi
+            if [ ! -f /usr/bin/python2 ]; then
+                SU ln -sf /usr/bin/python3 /usr/bin/python2
+            fi
+        else
+            echo "::group::Downloading mkdtboimg to /usr/local/bin"
+            SU cp -v "${{ github.action_path }}/mkdtboimg.py" /usr/local/bin/mkdtboimg
+            SU chmod +x /usr/local/bin/mkdtboimg
+            echo "::endgroup::"
+        fi
+
+        # Initialize Kali NetHunter if enabled
+        if [ "${{ inputs.nethunter }}" == "true" ]; then
+            echo "::group::Initializing Kali NetHunter"
+            cp -v "${{ github.action_path }}/nethunter/config.sh" nconfig.sh
+            bash nconfig.sh "arch/${{ inputs.arch }}/configs/${{ inputs.config }}" -w
+            if [ "${{ inputs.nethunter-patch }}" == "true" ]; then
+                git apply "${{ github.action_path }}/nethunter/add-wifi-injection.patch"
+                git apply "${{ github.action_path }}/nethunter/fix-ath9k-naming-conflict.patch"
+                if [ "$PATCHLEVEL" -lt 19 ]; then
+                    git apply "${{ github.action_path }}/nethunter/add-wifi-injection-4.14.patch"
+                fi
+            fi
+            echo "::endgroup::"
+        fi
+
+        # Disable LTO if specified
+        if [ "${{ inputs.disable-lto }}" == "true" ]; then
+            if grep -q "LTO" "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"; then
+                sed -i 's/CONFIG_LTO=y/CONFIG_LTO=n/' "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+                sed -i 's/CONFIG_LTO_CLANG=y/CONFIG_LTO_CLANG=n/' "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+                sed -i 's/CONFIG_THINLTO=y/CONFIG_THINLTO=n/' "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+                echo "CONFIG_LTO_NONE=y" >> "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+            fi
+        fi
+
+        # Enable KVM if specified
+        if [ "${{ inputs.kvm }}" == "true" ]; then
+            echo "CONFIG_VIRTUALIZATION=y" >> "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+            echo "CONFIG_KVM=y" >> "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+            echo "CONFIG_KVM_MMIO=y" >> "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+            echo "CONFIG_KVM_ARM_HOST=y" >> "arch/${{ inputs.arch }}/configs/${{ inputs.config }}"
+        fi
+
+        # Enable LXC if specified
+        if [ "${{ inputs.lxc }}" == "true" ]; then
+            echo "::group::Enabling LXC"
+            cp -v "${{ github.action_path }}/lxc/config.sh" config.sh
+            bash config.sh "arch/${{ inputs.arch }}/configs/${{ inputs.config }}" -w
+            if [ "${{ inputs.lxc-patch }}" == "true" ]; then
+                curl -sSL "${{ github.action_path }}/lxc/patch.sh" | bash
+            fi
+            echo "::endgroup::"
+        fi
+
+        # Build the kernel
+        echo "::group:: Building Kernel with selected cross compiler"
+
+        if [[ "${{ inputs.extra-make-args }}" != "[]" ]]; then
+            readarray -t EXTRA_ARGS < <(jq -r '.[]' <<< "${{ inputs.extra-make-args }}")
+        else
+            EXTRA_ARGS=()
+        fi
+
+        SAFE_EXTRA_ARGS=()
+        for arg in "${EXTRA_ARGS[@]}"; do
+            case "$arg" in
+                CC=*|CXX=*|LD=*|AS=*|AR=*|NM=*|STRIP=*|OBJCOPY=*|OBJDUMP=*|\
+                HOSTCC=*|KBUILD_HOSTCC=*|SHELL=*|MAKEFLAGS=*|MAKE=*|\
+                CROSS_COMPILE=*|CLANG_TRIPLE=*|LLVM=*|CLVM=*|O=*|ARCH=*)
+                    echo "::warning::Ignoring override of critical variable: $arg"
+                    ;;
+                *)
+                    SAFE_EXTRA_ARGS+=("$arg")
+                    ;;
+            esac
+        done
+
+        mkdir -p -v out
+
+        if [[ -d "$HOME/clang/bin" ]]; then
+            CMD_PATH="$HOME/clang/bin"
+            CMD_CC="clang"
+            if [[ -d "$HOME/gcc-64/bin" ]] || [[ -d "$HOME/gcc-32/bin" ]]; then
+                CMD_CROSS_COMPILE="$HOME/gcc-64/bin/${GCC64}-"
+                CMD_CROSS_COMPILE_ARM32="$HOME/gcc-32/bin/${GCC32}-"
+            fi
+        elif [[ -d "$HOME/gcc-64/bin" ]] || [[ -d "$HOME/gcc-32/bin" ]]; then
+            CMD_PATH="$HOME/gcc-64/bin:$HOME/gcc-32/bin"
+            if [[ -n "${GCC64:-}" ]]; then
+                CMD_CC="$HOME/gcc-64/bin/${GCC64}-gcc"
+                CMD_CROSS_COMPILE="${GCC64}-"
+            else
+                CMD_CC="$HOME/gcc-32/bin/${GCC32}-gcc"
+                CMD_CROSS_COMPILE="${GCC32}-"
+            fi
+            CMD_CROSS_COMPILE_ARM32="${GCC32}-"
+        else
+            CMD_CC="/usr/bin/clang"
+            CMD_CROSS_COMPILE="/usr/bin/aarch64-linux-gnu-"
+            CMD_CROSS_COMPILE_ARM32="arm-linux-gnueabihf-"  # 修正拼写
+        fi
+
+        if [[ "${{ inputs.ccache }}" == "true" ]]; then
+            export USE_CCACHE=1
+            export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+            CMD_PATH="/usr/lib/ccache:$CMD_PATH"
+        fi
+
+        make_args=(
+            -j"$(nproc --all)"
+            "${{ inputs.config }}"
+            "ARCH=${{ inputs.arch }}"
+            "O=out"
+            all
+            "${SAFE_EXTRA_ARGS[@]}"
+        )
+
+        # Set CLANG_TRIPLE based on the architecture
+        if [[ "${{ inputs.arch }}" == "arm" ]]; then
+            CMD_CLANG_TRIPLE="${CMD_CROSS_COMPILE_ARM32}"
+        else
+            CMD_CLANG_TRIPLE="aarch64-linux-gnu-"
+        fi
+
+        export PATH="$CMD_PATH:$PATH"
+        make \
+            CC="$CMD_CC" \
+            CROSS_COMPILE="$CMD_CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CMD_CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CMD_CLANG_TRIPLE" \
+           "${make_args[@]}"
+
+        echo "::endgroup::"
+
+        unset CMD_PATH CMD_CC CMD_CLANG_TRIPLE CMD_CROSS_COMPILE CMD_CROSS_COMPILE_ARM32 USE_CCACHE CLANG_PATH HOMES KVER SWAP_FILE SUBLEVEL PATCHLEVEL VERSION GCC_DIR FILE FILE_NAME MATCHED_DIR FOLDER FOLDER_NAME GCC64 GCC32 NEED_GCC AOSP_CLANG_URL OTHER_CLANG_URL AOSP_GCC64_URL AOSP_GCC32_URL AOSP_GCC_BRANCH OTHER_GCC64_URL OTHER_GCC32_URL EXTRA_ARGS make_args SAFE_EXTRA_ARGS EXTRA_CMD
+
+        # Package the kernel output
+        if [ "${{ inputs.anykernel3 }}" == "false" ]; then
+            echo "::group::Packaging boot.img"
+
+            # Validate bootimg-url is provided
+            if [ -z "${{ inputs.bootimg-url }}" ]; then
+                error "bootimg-url is required when anykernel3 is false"
+            fi
+
+            mkdir split
+            cd split
+            HOST_ARCH=$(dpkg --print-architecture)
+            case "${HOST_ARCH}" in
+                armv7*|armv8l|arm64|armhf|arm) aria2c https://github.com/Shubhamvis98/AIK/raw/4ac321dfd48e16344e6146c505708aa720ff0bb3/bin/magiskboot_arm -o magiskboot && chmod +x magiskboot ;;
+                i*86|x86|amd64|x86_64) aria2c https://github.com/Shubhamvis98/AIK/raw/4ac321dfd48e16344e6146c505708aa720ff0bb3/bin/magiskboot_x86 -o magiskboot && chmod +x magiskboot ;;
+                *) error "Unknown CPU architecture for this device!" ;;
+            esac
+            unset HOST_ARCH
+            aria2c "${{ inputs.bootimg-url }}" -o boot.img || error "Failed to download boot.img"
+            ./magiskboot unpack boot.img > nohup.out 2>&1 # nohup is not working in github ci!
+            export FMT=$(cat nohup.out | grep "KERNEL_FMT" | awk '{gsub("\\[", "", $2); gsub("\\]", "", $2); print $2}')
+            rm -rf kernel
+            if [ "$FMT" == "raw" ]; then
+                if ! find ../out/arch/${{ inputs.arch }}/boot -name "Image" ! -name "*-*" -exec cp -v {} kernel \; 2>/dev/null; then
+                    error "Failed to find kernel Image"
+                fi
+            else
+                if [ -f dtb ]; then
+                    if ! find ../out/arch/${{ inputs.arch }}/boot -name "Image.*-dtb" ! -name "*-*" -exec cp -v {} kernel \; 2>/dev/null; then
+                        error "Failed to find kernel Image with dtb"
+                    fi
+                else
+                    if ! find ../out/arch/${{ inputs.arch }}/boot -name "Image.*" ! -name "*-*" -exec cp -v {} kernel \; 2>/dev/null; then
+                        error "Failed to find compressed kernel Image"
+                    fi
+                fi
+            fi
+            ./magiskboot repack boot.img
+            rm -f boot.img
+            mkdir -p ../../../build
+            find . -name "*.img" -exec mv -v {} ../../../build/boot.img \;
+            cd ..
+            echo "::endgroup::"
+        else
+            echo "::group:: Packaging Anykernel3 flasher"
+            if [ -n "${{ inputs.anykernel3-url }}" ]; then
+                git clone "${{ inputs.anykernel3-url }}" AnyKernel3
+            else
+                git clone https://github.com/osm0sis/AnyKernel3
+                sed -i 's!BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!BLOCK=auto;!g' AnyKernel3/anykernel.sh
+                sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+                sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
+            fi
+
+            if [ -f out/arch/${{ inputs.arch }}/boot/Image.*-dtb ]; then
+                if ! find out/arch/${{ inputs.arch }}/boot -name "Image.*-dtb" -exec cp -rv {} AnyKernel3/ \; 2>/dev/null; then
+                    error "Failed to copy kernel Image with dtb"
+                fi
+            elif [ -f out/arch/${{ inputs.arch }}/boot/Image.* ]; then
+                if ! find out/arch/${{ inputs.arch }}/boot -name "Image.*" ! -name "Image.*-dtb" -exec cp -rv {} AnyKernel3/ \; 2>/dev/null; then
+                    error "Failed to copy compressed kernel Image"
+                fi
+            else
+                if [ ! -f out/arch/${{ inputs.arch }}/boot/Image ]; then
+                    error "Kernel Image not found"
+                fi
+                cp out/arch/${{ inputs.arch }}/boot/Image AnyKernel3/ -rv
+            fi
+
+            if [ -f out/arch/${{ inputs.arch }}/boot/dtbo.img ]; then
+                cp out/arch/${{ inputs.arch }}/boot/dtbo.img AnyKernel3/ -rv
+            else
+                echo "Failed to copy DTBO image. File not found."
+            fi
+
+            if [ -f out/arch/${{ inputs.arch }}/boot/dtb.img ]; then
+                cp out/arch/${{ inputs.arch }}/boot/dtb.img AnyKernel3/ -rv
+            elif [ -f out/arch/${{ inputs.arch }}/boot/dtb ]; then
+                cp out/arch/${{ inputs.arch }}/boot/dtb AnyKernel3/ -rv
+            else
+                echo "Failed to copy dtb. File not found."
+            fi
+
+            rm -rf -v AnyKernel3/.git* AnyKernel3/README.md
+            mkdir -p -v ../../build
+            if [ "${{ inputs.release }}" = "false" ]; then
+                cp -r -v AnyKernel3/* ../../build
+            else
+                cd AnyKernel3 && zip -r Anykernel3-flasher.zip ./* && mv -v Anykernel3-flasher.zip .. && cd .. && mv -v Anykernel3-flasher.zip ../../build/
+            fi
+            echo "::endgroup::"
+        fi
+
+    - id: uploadi
+      if: ${{ inputs.release == 'false' && inputs.anykernel3 == 'false' }}
+      uses: actions/upload-artifact@v5
+      with:
+        name: kernel-built-bootimg
+        path: build/*
+        if-no-files-found: error
+        overwrite: true
+
+    - id: uploada
+      if: ${{ inputs.release == 'false' && inputs.anykernel3 == 'true' }}
+      uses: actions/upload-artifact@v5
+      with:
+        name: Anykernel3-flasher
+        path: build/*
+        if-no-files-found: error
+        overwrite: true
+
+    - id: release
+      if: inputs.release == 'true'
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ inputs.access-token }}
+      with:
+        name: Last CI build kernel
+        tag_name: last-ci-${{ github.sha }}
+        files: build/*
+        make_latest: true
+        body: |
+          Build Information:
+          - Config: ${{ inputs.config }}
+          - Branch: ${{ inputs.kernel-branch }}
+          - Source: ${{ inputs.kernel-url }}
+          - Architecture: ${{ inputs.arch }}
+
+          Features:
+          - KernelSU: ${{ inputs.ksu }}
+          - NetHunter: ${{ inputs.nethunter }}
+          - LXC: ${{ inputs.lxc }}
+          - Docker: ${{ inputs.docker }}
+          - KVM: ${{ inputs.kvm }}
+          - Rekernel: ${{ inputs.rekernel }}
+
+          Build Details:
+          - Timestamp: ${{ github.event.repository.updated_at }}
+          - Workflow: ${{ github.workflow }}
+          - Run ID: ${{ github.run_id }}
+          - Commit: ${{ github.sha }}
