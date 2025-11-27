@@ -15,7 +15,7 @@ jobs:
       - name: Build Kernel
         uses: dabao1955/kernel_build_action@main
         with:
-          kernel-url: https://github.com/Andrey0800770/samsung_sdm845-kernel.git
+          kernel-url: https://github.com/haifu5872/N9600_SDM845_kernel.git
           kernel-dir: msm-4.19
           kernel-branch: main
           config: crownqlte_chn_hk_defconfig
