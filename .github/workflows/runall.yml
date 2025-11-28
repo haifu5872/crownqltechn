@@ -18,8 +18,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: haifu5872/kernel_samsung_sdm845
-          ref: lineage-16.0
+          repository: haifu5872/traviBANsamsung-kernel
+          ref: samsung-oss
           submodules: "false"
           fetch-depth: 100
       - name: Set artifact name
