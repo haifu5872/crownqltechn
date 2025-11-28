@@ -6,7 +6,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - crownqlte_chn_open_defconfig
+          - crownqlte_defconfig
           - crownqlte_chn_open_fromjg
           - sdm845_defconfig
           - crownqlte_chn_open_V4_defconfig
@@ -29,7 +29,7 @@ jobs:
         id: artifact_name
         run: |
           case "${{ matrix.config }}" in
-            "crownqlte_chn_open_defconfig") echo "name=crownqlte-open${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "crownqlte_defconfig") echo "name=cro-depen${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_open_fromjg") echo "name=crownqlte_chn_fromjg${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "sdm845_defconfig") echo "name=lineage-sdm845${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_open_V4_defconfig") echo "name=crownqlte-V4${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
