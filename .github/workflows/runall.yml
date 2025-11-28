@@ -7,11 +7,7 @@ jobs:
       matrix:
         config:
           - star2qlte_chn_open_defconfig
-          - starqlte_chn_open_defconfig
-          - starqlte_usa_single_defconfig
-          - star2qlte_usa_single_defconfig
-          - starqlte_jpn_defconfig
-          - crownqlte_chn_open_defconfig
+          - crownqlte_chn_hk_defconfig
     runs-on: ubuntu-latest
     env:
       KERNEL_DEFCONFIG: "${{ matrix.config }}"
@@ -30,11 +26,7 @@ jobs:
         run: |
           case "${{ matrix.config }}" in
             "crownqlte_chn_open_defconfig") echo "name=crownqltechn-v4.9.337${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
-            "star2qlte_usa_single_defconfig") echo "name=star2qlteusa-v4.9.337${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
-            "starqlte_jpn_defconfig") echo "name=starqltejpn-v4.9.337${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "star2qlte_chn_open_defconfig") echo "name=star2qltechn-v4.9.337${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
-            "starqlte_chn_open_defconfig") echo "name=starqltechn-v4.9.337${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
-            "starqlte_usa_single_defconfig") echo "name=starqlteusa-v4.9.337${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
           esac
       - name: Install dependencies
         run: |
