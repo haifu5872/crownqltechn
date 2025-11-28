@@ -6,7 +6,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - star2qlte_chn_open_defconfig
+          - star2qltestname_defconfig
           - crownqlte_chn_hk_defconfig
     runs-on: ubuntu-latest
     env:
