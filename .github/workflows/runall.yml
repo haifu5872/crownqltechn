@@ -7,7 +7,8 @@ jobs:
       matrix:
         config:
           - crownqlte_chn_open_defconfig
-          - star2qlte_chn_open_defconfig
+          - sdm845-perf_defconfig
+          - sdm845_defconfig
           - crownqlte_chn_open_V4_defconfig
           - crownqlte_chn_soon_defconfig
           - crownqlte_chn_hk_defconfig
@@ -20,8 +21,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: haifu5872/ZEROA-kernel
-          ref: main
+          repository: haifu5872/linea-kernel-845
+          ref: lineage-19.1
           submodules: "false"
           fetch-depth: 100
       - name: Set artifact name
@@ -29,7 +30,8 @@ jobs:
         run: |
           case "${{ matrix.config }}" in
             "crownqlte_chn_open_defconfig") echo "name=crownqlte-open${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
-            "star2qlte_chn_open_defconfig") echo "name=star2qlte-chn${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "sdm845-perf_defconfig") echo "name=lineage-sdm845-perf${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "sdm845_defconfig") echo "name=lineage-sdm845${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_open_V4_defconfig") echo "name=crownqlte-V4${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_soon_defconfig") echo "name=crownqlte-soon${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;            
             "crownqlte_chn_hk_defconfig") echo "name=crownqlte-hk${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
