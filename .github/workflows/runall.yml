@@ -8,6 +8,8 @@ jobs:
         config:
           - crownqlte_chn_open_defconfig
           - star2qlte_chn_open_defconfig
+          - crownqlte_chn_open_V4_defconfig
+          - crownqlte_chn_soon_defconfig
           - crownqlte_chn_hk_defconfig
     runs-on: ubuntu-latest
     env:
@@ -18,8 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: haifu5872/traviBANsamsung-kernel
-          ref: samsung-oss
+          repository: haifu5872/ZEROA-kernel
+          ref: main
           submodules: "false"
           fetch-depth: 100
       - name: Set artifact name
@@ -28,6 +30,8 @@ jobs:
           case "${{ matrix.config }}" in
             "crownqlte_chn_open_defconfig") echo "name=crownqlte-open${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "star2qlte_chn_open_defconfig") echo "name=star2qlte-chn${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "crownqlte_chn_open_V4_defconfig") echo "name=crownqlte-V4${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "crownqlte_chn_soon_defconfig") echo "name=crownqlte-soon${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;            
             "crownqlte_chn_hk_defconfig") echo "name=crownqlte-hk${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
           esac
       - name: Install dependencies
