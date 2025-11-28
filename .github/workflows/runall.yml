@@ -7,7 +7,7 @@ jobs:
       matrix:
         config:
           - crownqlte_chn_open_defconfig
-          - sdm845-perf_defconfig
+          - crownqlte_chn_open_fromjg
           - sdm845_defconfig
           - crownqlte_chn_open_V4_defconfig
           - crownqlte_chn_soon_defconfig
@@ -30,7 +30,7 @@ jobs:
         run: |
           case "${{ matrix.config }}" in
             "crownqlte_chn_open_defconfig") echo "name=crownqlte-open${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
-            "sdm845-perf_defconfig") echo "name=lineage-sdm845-perf${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "crownqlte_chn_open_fromjg") echo "name=crownqlte_chn_fromjg${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "sdm845_defconfig") echo "name=lineage-sdm845${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_open_V4_defconfig") echo "name=crownqlte-V4${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_soon_defconfig") echo "name=crownqlte-soon${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;            
