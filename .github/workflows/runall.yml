@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: Andrey0800770/samsung_sdm845-kernel
+          repository: haifu5872/N9600_SDM845_kernel
           ref: ksu+susfs
           submodules: "false"
           fetch-depth: 100
