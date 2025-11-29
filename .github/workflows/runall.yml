@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: https://github.com/klabit87/android_kernel_samsung_sdm845
+          repository: https://github.com/klabit87/android_kernel_samsung_sdm845.git
           ref: q
           submodules: "false"
           fetch-depth: 100
