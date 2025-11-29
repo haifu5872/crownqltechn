@@ -19,7 +19,7 @@ jobs:
       EXTRAVERSION: "N9"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: https://github.com/klabit87/android_kernel_samsung_sdm845.git
           ref: q
@@ -55,7 +55,7 @@ jobs:
           export PATH=$(pwd)/clang/bin/:$PATH
           make $KERNEL_CMDLINE $KERNEL_DEFCONFIG CC="clang" && make $KERNEL_CMDLINE CC="clang" -j$(nproc --all) && cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
       - name: Upload Kernel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.artifact_name.outputs.name }}
           path: "AnyKernel3/*"
