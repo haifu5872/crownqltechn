@@ -12,7 +12,7 @@ jobs:
 
     steps:
     - name: Build Kernel
-      uses: haifu5872/crownqltechn@main
+      uses: haifu5872/crownqltechn@dependabot-github_actions
       with:
           kernel-url: https://github.com/klabit87/android_kernel_samsung_sdm845
           kernel-dir: sdm845
