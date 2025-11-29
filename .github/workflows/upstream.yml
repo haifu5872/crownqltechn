@@ -1,4 +1,4 @@
-name: Upstream Build
+name: use-Upstream
 on:
   workflow_dispatch:
 
@@ -14,10 +14,10 @@ jobs:
     - name: Build Kernel
       uses: Andrey0800770/kernel_build_action@main
       with:
-          kernel-url: https://github.com/Andrey0800770/samsung_sdm845-kernel
+          kernel-url: https://github.com/haifu5872/crownqltechn9600_kernel
           kernel-dir: sdm845
-          kernel-branch: merge
-          config: star2qlte_chn_open_defconfig
+          kernel-branch: master
+          config: crownqlte_chn_V4_defconfig
           arch: arm64
           gcc64-tar: http://releases.linaro.org/components/toolchain/binaries/7.5-2019.12/aarch64-elf/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-elf.tar.xz
           path: $HOME/gcc64/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-elf/bin:$PATH
