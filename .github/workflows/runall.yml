@@ -6,8 +6,8 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - crownqlte_defconfig
-          - crownqlte_chn_open_fromjg
+          - crownqlte_chn_open_defconfig
+          - crownqlte_usa_single_defconfig
           - sdm845_defconfig
           - crownqlte_chn_open_V4_defconfig
           - crownqlte_chn_soon_defconfig
@@ -21,16 +21,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: haifu5872/N9600_SDM845_kernel
-          ref: ksu+susfs
+          repository: https://github.com/klabit87/android_kernel_samsung_sdm845
+          ref: q
           submodules: "false"
           fetch-depth: 100
       - name: Set artifact name
         id: artifact_name
         run: |
           case "${{ matrix.config }}" in
-            "crownqlte_defconfig") echo "name=cro-depen${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
-            "crownqlte_chn_open_fromjg") echo "name=crownqlte_chn_fromjg${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "crownqlte_chn_open_defconfig") echo "name=cro-depen${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
+            "crownqlte_usa_single_defconfig") echo "name=crownqlte_chn_fromjg${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "sdm845_defconfig") echo "name=lineage-sdm845${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_open_V4_defconfig") echo "name=crownqlte-V4${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;
             "crownqlte_chn_soon_defconfig") echo "name=crownqlte-soon${{ env.EXTRAVERSION }}" >> $GITHUB_OUTPUT ;;            
